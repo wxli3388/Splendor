@@ -1,0 +1,299 @@
+<html>
+    <head>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    </head>
+    <style>
+        .card-element {
+            width: 200px;
+            height: 280px;
+            background-size: 1000% 700%; 
+        }
+        .noble-element {
+            width: 200px;
+            height: 280px;
+            background-size: 100% 100%; 
+        }
+        .gem-element {
+            width: 50px;
+            height: 50px;
+            background-size: 200% 100%; 
+        }
+    </style>
+    
+    <body>
+        
+        
+        <div id="app">
+            <div v-show="status<=1">
+                <button @click="connect">Connect</button>
+                <br>
+                <button @click="joinRoom()">joinRoom</button>
+                <button @click="leaveRoom">leaveRoom</button>
+                <!-- <button id="disconnect">Disconnect</button> -->
+
+                <div>
+                    Message: <input type="text" v-model="message">
+                    <button @click="sendMessage()">Send</button>
+                </div>
+            </div>
+            <div class="container" style="padding-top: 10px;">
+                <div v-show="status===1" class="row">
+                    <div v-for="room in data.roomInfo" class="col-3 room-card">
+                        <h5 class="card-title">{{room.roomId}}</h5>
+                        <h5 class="card-title">{{room.roomName}}</h5>
+                        <p class="card-text">Current Players: {{room.usersCount}}/{{room.maxPlayer}}</p>
+                        <button class="btn btn-join" :class="room.canJoin? 'btn-primary':'btn-secondary'" @click="joinRoom(room.roomId)">Join Room</button>
+                        <button v-if="room.roomId==data.roomId" class="float-end btn btn-join btn-primary"  @click="leaveRoom(room.roomId)">Leave Room</button>
+                        <br>
+                        <button v-if="room.roomId==data.roomId" style="margin-top:50px" class="btn btn-join btn-primary"  @click="sendMessage('startGame')">startGame</button>
+                        
+                    </div>
+                </div>
+                <div v-show="status===2">
+                    <div class="row">
+                        <div class="col-12 d-flex flex-row">
+                            <div v-for="(item, key, index) in data.gameTable.gems" class="d-flex flex-row">
+                                <img class="gem-element" :style="getGemImage(key)">
+                                <div> x {{item}}</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <img v-for="card in data.gameTable.noble" class="noble-element" :style="getNobleImage(card)">
+                        </div>
+                        <div class="col-12">
+                            <img class="card-element" :style="getCardBackImage(3)">
+                            <img v-for="card in data.gameTable.cardHigh" class="card-element" :style="getCardImage(card)">
+                        </div>
+                        <div class="col-12">
+                            <img class="card-element" :style="getCardBackImage(2)">
+                            <img v-for="card in data.gameTable.cardMid" class="card-element" :style="getCardImage(card)">
+                        </div>
+                        <div class="col-12">
+                            <img class="card-element" :style="getCardBackImage(1)">
+                            <img v-for="card in data.gameTable.cardLow" class="card-element" :style="getCardImage(card)">
+                        </div>
+                        
+                    </div>
+                    <div class="row">
+                        <div class="col-12" v-show="data.yourTurn">
+                            balbalbabablabal
+                            <!-- <h1 class="text-danger bg-dark">my turn</h1> -->
+                        </div>
+                        <!-- <div class="col-12" style="padding-top: 50px;" v-if="data.coverCard.length>0">
+                            <h2>Your cover cards</h2>
+                            <img v-for="card in data.coverCard" :src="getImage(card)" style="width:80px">
+                        </div> -->
+                    </div>
+                </div>
+                <!-- <div v-show="status===3" class="row">
+                    <div class="col-12">
+                        <div v-for="(item, index) in data.gameOver.score">
+                            <img v-for="card in data.gameOver.coverCard[index]" :src="getImage(card)" style="width:80px">
+                            <h3>{{data.gameOver.score[index]}}</h3>
+                            <h3>------------------------------------------------------------------------------</h3>
+                        </div>
+                    </div>
+                </div> -->
+            </div>
+        </div>
+    </body>
+</html>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+
+<script>
+    const { createApp, ref } = Vue
+  
+    const Diamond = "0"
+    const Sapphire = "1"
+    const Emerald = "2"
+    const Ruby = "3"
+    const Onyx = "4"
+    const Gold = "5"
+    const CardWidth = 200
+    const CardHeight = 280
+    createApp({
+        data() {
+            return {
+                ws: null,
+                message: '',
+                data: {
+                    roomInfo: [],
+                    roomId: null,
+                    inGame: false,
+                    card: [],
+                    yourTurn: false,
+                    gameTable: {
+                        cardLow: [],
+                        cardMid: [],
+                        cardHigh: [],
+                        isDeckLowEmpty: false,
+                        isDeckMidEmpty: false,
+                        isDeckHighEmpty: false,
+                        gems: {
+                            Diamond:0,
+                            Sapphire:0,
+                            Emerald:0,
+                            Ruby:0,
+                            Onyx:0,
+                            Gold:0,
+                        }
+                    }
+                },
+                pingTimer: null,
+                status: 0,
+            }
+        },
+        methods: {
+            connect() {
+                self = this
+                this.ws = new WebSocket('ws://localhost:8080/ws') 
+                this.ws.onopen = () => {
+                    console.log('[open connection]')
+                    self.sendMessage("connected")
+                    self.status = 1
+
+                    this.ws.onmessage = event => {
+                        console.log(`[Message from server]:\n %c${event.data}` , 'color: red')
+                        
+                        let cmd = event.data.substring(0, event.data.indexOf(' '));
+                        let data = event.data.substring(event.data.indexOf(' ') + 1);
+                        if(cmd===""){
+                            cmd = event.data
+                        }
+                        switch(cmd) {
+                            case 'roomInfo':
+                                var d = JSON.parse(data)
+                                self.data.roomInfo = d.roomInfo
+                                break
+                            case 'joinRoom':
+                                var d = JSON.parse(data)
+                                self.data.roomId = d.roomId
+                                break
+                            case 'leaveRoom':
+                                var d = JSON.parse(data)
+                                if(d.success){
+                                    self.data.roomId = null
+                                }
+                                self.status = 1
+                                break
+                            case 'gameStart':
+                                // self.clearDesk()
+                                self.status = 2
+                                console.log(self.status)
+                                break
+                            case 'gameOver':
+                                var d = JSON.parse(data)
+                                self.status = 3
+                                // gameOver = {}
+                                // gameOver.score = d.score
+                                // gameOver.coverCard = []
+                                // for(coverCard of d.coverCard){
+                                //     if(coverCard.length==0){
+                                //         gameOver.coverCard.push([])
+                                //     }else{
+                                //         var arr = coverCard.match(/.{2}/g).sort();
+                                //         gameOver.coverCard.push(arr)
+                                //     }
+                                // }
+                                self.data.gameOver = gameOver
+                                break
+                            case 'gameTable':
+                                var d = JSON.parse(data)
+                                this.data.gameTable = d
+                            case 'backToRoom':
+                                // self.status = 1
+                                this.sendMessage('roomInfo')
+                                break
+                        }
+                    }
+                }
+            },
+            sendMessage(message) {
+                if(message){
+                    this.ws.send(message)
+                }else{
+                    this.ws.send(this.message)
+                }
+                
+            },
+            joinRoom(roomId = '') {
+                if(roomId==''){
+                    
+                    this.sendMessage(`joinRoom`)
+                }else{
+                    let s = JSON.stringify({'roomId':roomId})
+                    this.sendMessage(`joinRoom ${s}`)
+                }
+            },
+            leaveRoom() {
+                this.message = "leaveRoom"
+                this.sendMessage()
+            },
+            getCardImage(card) {
+                if(card==null){
+                    return {
+                        'background-position': `0 ${-CardHeight*5}`,
+                        'background-image': `url("img/card1.jpg")`
+                    }
+                }
+
+                cardNumber = card.number
+                cardNumber-=1
+                picNumber = 1
+                vertical = 0
+                if(cardNumber>=70){
+                    cardNumber = cardNumber-70
+                    picNumber = 3
+                } else if(cardNumber>=40){
+                    cardNumber = cardNumber-40
+                    picNumber = 2
+                }
+                
+                horizon = (cardNumber%10)*(-CardWidth)
+                vertical = Math.floor(cardNumber/10)*(-CardHeight)
+                
+                return {
+                    'background-position': `${horizon} ${vertical}`,
+                    'background-image': `url("img/card${picNumber}.jpg")`
+                }
+            },
+            getGemImage(key){
+                mp = {
+                    [Diamond]: "diamond",
+                    [Sapphire]: "sapphire",
+                    [Emerald]: "emerald",
+                    [Ruby]: "ruby",
+                    [Onyx]: "onyx",
+                    [Gold]: "gold"
+                }
+                pic = mp[key]
+                return {
+                    'background-image': `url("img/${pic}.jpg")`
+                }
+            },
+            getCardBackImage(num){
+                vertical = -CardHeight*6
+                horizon = -CardWidth*9
+                return {
+                    'background-position': `${horizon} ${vertical}`,
+                    'background-image': `url("img/card${num}.jpg")`
+                }
+            },
+            getNobleImage(card) {
+                if(card==null){
+                    return
+                }
+                return {
+                    'background-image': `url("img/noble_${card.number}.jpg")`
+                }
+            }
+        },
+    }).mount('#app')
+</script>
+
+
+
+

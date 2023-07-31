@@ -1,0 +1,2 @@
+go mod init sevens
+go get github.com/gorilla/websocket
