@@ -15,7 +15,7 @@ go run cmd/main.go
 
 Open the html 
 ```
-splendor/web/ws
+splendor/web/ws.html
 ```
 
 # demo
